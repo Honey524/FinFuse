@@ -1,12 +1,9 @@
-# 📊 Financial Copilot
-
-**Real-Time Market Intelligence & LLM-Powered Financial Assistant**
-
+# 📊 FinFuse - Real-Time Market Intelligence & LLM-Powered Financial Assistant
 ---
 
 ## 🚀 Overview
 
-**Financial Copilot** is an AI-powered financial intelligence dashboard that combines **real-time stock & crypto prices**, **financial news aggregation**, **sentiment analysis**, and a **Retrieval-Augmented Generation (RAG) based conversational assistant**.
+**FinFuse Copilot** is an AI-powered financial intelligence dashboard that combines **real-time stock & crypto prices**, **financial news aggregation**, **sentiment analysis**, and a **Retrieval-Augmented Generation (RAG) based conversational assistant**.
 
 It enables users to:
 

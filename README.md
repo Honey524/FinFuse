@@ -1,81 +1,129 @@
 # 📊 FinFuse - Real-Time Market Intelligence & LLM-Powered Financial Assistant
 ---
+## 📌 Overview
 
-## 🚀 Overview
+**FinFuse** is a full-stack, AI-powered financial intelligence dashboard that combines:
 
-**FinFuse Copilot** is an AI-powered financial intelligence dashboard that combines **real-time stock & crypto prices**, **financial news aggregation**, **sentiment analysis**, and a **Retrieval-Augmented Generation (RAG) based conversational assistant**.
+* 📈 **Live stock, crypto & index market data**
+* 📰 **LLM-driven financial news summarization**
+* 🧠 **Retrieval-Augmented Generation (RAG) for deep market Q&A**
+* 📊 **Professional trading indicators (EMA, RSI, MACD, Volume)**
+* 💬 **Conversational Copilot Chat with real-time market context**
 
-It enables users to:
-
-* Track live market prices with dynamic charts
-* Read sentiment-colored financial news
-* Ask natural language questions about markets, companies, and trends
-* Get answers enriched with **live market data + PDF knowledge base**
+Built using **Streamlit, Plotly, yFinance, HuggingFace, and OpenAI**, this project replicates the core experience of tools like **TradingView + Bloomberg + AI Copilot** in a single unified interface.
 
 ---
 
-## 🧠 Key Features
+## 🚀 Key Features
 
-### 🔴 Live Market Tracking
+### 1️⃣ Market Terminal (Stocks, Crypto & Indices)
 
-* Real-time stock & crypto prices (India 🇮🇳 + US 🇺🇸 markets)
-* Auto-refreshing price charts
-* Price movement indicators (↑ ↓)
+* Select **any company, US stock, Indian stock, or crypto** from a unified list
+* Real-time market metrics:
 
-### 📰 Financial News Intelligence
+  * Current Market Price
+  * Open / High / Low / Close
+  * Daily Change & % Change
+* Interactive charts:
 
-* Aggregates news from multiple sources (Finnhub, NewsAPI, GNews, Yahoo Finance)
-* Deduplicates similar articles
-* Sentiment analysis using **FinBERT**
-* One-click **LLM-generated summaries**
+  * 📈 Candlestick Price Chart
+  * 📊 Volume + Volume SMA
+  * 📉 RSI (14)
+  * 📉 MACD (12, 26, 9)
 
-### 💬 Financial Copilot Chat (RAG + Live Data)
+### 2️⃣ AI-Powered Financial News Engine
 
-* Ask questions like:
+* Aggregates news from:
 
-  * *“What is the current price of Infosys?”*
-  * *“How is the market sentiment today?”*
+  * Finnhub
+  * Yahoo Finance
+  * NewsAPI
+  * GNews
+* Deduplicates overlapping articles
+* Uses **FinBERT** for sentiment analysis
+* Uses **FLAN-T5 Large** for detailed financial summaries
+* Interactive **3×3 sentiment-colored news cards**
+
+### 3️⃣ Financial Copilot Chat (LLM + RAG)
+
+* Ask natural-language questions like:
+
+  > “What is the current price of Infosys and what does recent news say?”
 * Combines:
 
-  * PDF-based knowledge (RAG using FAISS)
-  * Live stock & crypto prices
-  * Latest financial news
-* Powered by OpenAI LLM
+  * Real-time market data
+  * Company profiles
+  * Recent news
+  * PDF-based knowledge via FAISS
+* Answers generated using **OpenAI GPT + RAG pipeline**
 
 ---
 
-## 🏗️ Project Architecture
+## 🧱 Project Architecture
 
 ```
-├── app.py                  # Streamlit dashboard (UI + interaction)
-├── companies.py            # Stock, index & crypto ticker mapping
-├── data_sources.py         # Market data & news aggregation layer
-├── llm.py                  # OpenAI LLM interface
-├── llm_processor.py        # News summarization & sentiment analysis
-├── rag_pipeline.py         # Full RAG pipeline with live data
-├── retriever.py            # FAISS vector search
-├── indexer.py              # PDF indexing & embedding creation
-├── pdf_loader.py           # PDF loading & chunking
-├── requirements.txt        # Project dependencies
-├── faiss_index/            # Vector database (generated)
-└── README.md
+Financial-Copilot/
+│
+├── app.py                 # Main Streamlit application
+├── companies.py           # Central company / asset mapping
+├── data_sources.py        # Market data + news APIs
+├── rag_pipeline.py        # RAG orchestration logic
+├── retriever.py           # FAISS similarity search
+├── indexer.py             # PDF → Embeddings → FAISS index
+├── llm.py                 # OpenAI chat wrapper
+├── llm_processor.py       # News summarization & sentiment
+├── pdf_loader.py          # PDF chunking & loading
+├── requirements.txt       # All dependencies
+└── README.md              # Project documentation
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 🧠 Tech Stack
 
-| Layer       | Technology                       |
-| ----------- | -------------------------------- |
-| Frontend    | Streamlit, Plotly                |
-| Backend     | Python                           |
-| LLM         | OpenAI (Chat Completions API)    |
-| NLP         | spaCy, Hugging Face Transformers |
-| Sentiment   | FinBERT                          |
-| RAG         | LangChain + FAISS                |
-| Market Data | yFinance, CoinGecko              |
-| News APIs   | Finnhub, NewsAPI, GNews          |
-| Embeddings  | Sentence Transformers            |
+### 🖥 Frontend & Visualization
+
+* **Streamlit** – Interactive dashboard UI
+* **Plotly** – Professional trading charts
+* **HTML/CSS (inline)** – Custom UI styling
+
+### 📊 Market & Financial Data
+
+* **yFinance** – Stocks, indices, historical OHLC data
+* **CoinGecko API** – Live crypto prices
+* **Finnhub API** – Company profiles & news
+* **Yahoo Finance News**
+
+### 🤖 AI & NLP
+
+* **OpenAI GPT-4o-mini** – Conversational reasoning
+* **HuggingFace Transformers**
+
+  * FLAN-T5 Large → Financial summarization
+  * FinBERT → Financial sentiment analysis
+* **spaCy** – Named entity recognition (company extraction)
+
+### 🧠 Retrieval-Augmented Generation (RAG)
+
+* **FAISS** – Vector similarity search
+* **Sentence-Transformers (MiniLM)** – Embeddings
+* **LangChain** – RAG pipeline orchestration
+
+---
+
+## 🗂 Company & Asset Coverage
+
+Your `companies.py` file defines a **single source of truth** for all supported assets:
+
+* 🇮🇳 **NIFTY 50 companies**
+* 🇺🇸 **US Big Tech & blue-chip stocks**
+* 💰 **Popular cryptocurrencies (BTC, ETH, SOL, etc.)**
+
+This allows:
+
+* One dropdown → multiple asset classes
+* Automatic detection of **stock vs crypto**
+* Unified charting and analytics logic
 
 ---
 
@@ -92,7 +140,7 @@ cd financial-copilot
 
 ```bash
 python -m venv venv
-source venv/bin/activate   # Linux / Mac
+source venv/bin/activate   # Linux / macOS
 venv\Scripts\activate      # Windows
 ```
 
@@ -102,17 +150,9 @@ venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 ```
 
-### 4️⃣ Download spaCy Model
+### 4️⃣ Set Environment Variables
 
-```bash
-python -m spacy download en_core_web_sm
-```
-
----
-
-## 🔐 Environment Variables
-
-Create a `.env` file in the project root:
+Create a `.env` file:
 
 ```env
 OPENAI_API_KEY=your_openai_key
@@ -121,58 +161,53 @@ NEWSAPI_KEY=your_newsapi_key
 GNEWS_KEY=your_gnews_key
 ```
 
-> ❗ **Never commit `.env` to GitHub**
-
----
-
-## 📄 Index PDFs for RAG (Optional but Recommended)
-
-If you want PDF-based question answering:
-
-```bash
-python indexer.py
-```
-
-This creates a **FAISS vector index** used by the Copilot chat.
-
----
-
-## ▶️ Run the Application
+### 5️⃣ Run the App
 
 ```bash
 streamlit run app.py
 ```
 
-Open in browser:
+---
 
-```
-http://localhost:8501
-```
+## 🧪 How the System Works (End-to-End)
+
+1. **User selects a company**
+2. Market data is fetched via `yfinance`
+3. Indicators are calculated locally (EMA, RSI, MACD)
+4. News is fetched, deduplicated, summarized, and sentiment-scored
+5. Copilot chat:
+
+   * Extracts companies from query
+   * Pulls live prices + news
+   * Retrieves PDF context via FAISS
+   * Sends enriched prompt to OpenAI
+6. Final answer is rendered with sources and live facts
 
 ---
 
-## 💡 Example Use Cases
+## 📈 Use Cases
 
-* 📈 Track live stock & crypto prices
-* 📰 Understand market sentiment instantly
-* 🤖 Ask financial questions in natural language
-* 📊 Combine news + price + LLM reasoning in one place
-* 🎓 Ideal for **students, analysts, and fintech demos**
-
----
-
-## 📌 Future Enhancements
-
-* User authentication
-* Portfolio tracking
-* Price alerts (email / push)
-* Multi-PDF knowledge bases
-* Deployment on AWS / GCP
+* 📊 Market trend analysis
+* 🧠 AI-assisted investment research
+* 📰 Financial news digestion
+* 🎓 Academic & MCA project demonstration
+* 💼 Interview-ready portfolio project
 
 ---
 
-## 👨‍💻 Author
+## 🔮 Future Enhancements
+
+* Auto-refresh during market hours
+* Portfolio tracking & PnL
+* Buy/Sell simulation
+* Options & derivatives data
+* Multi-PDF financial knowledge base
+* Cloud deployment (AWS / GCP)
+
+---
+
+## 👤 Author
 
 **Honey J**
-MCA | AI & Full-Stack Developer
-Focused on **LLM systems, RAG, and real-time data platforms**
+MCA | Financial AI & Full-Stack Development
+Project built for **advanced academic + real-world finance use**

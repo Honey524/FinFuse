@@ -102,153 +102,216 @@ st.title("Financial Market Dashboard")
 tabs = st.tabs(["Live Prices & Charts", "Financial News", "Copilot Chat"])
 
 # =======================================================
-# TAB 1: LIVE MARKET TRACKER (REAL-TIME STREAMING)
+# TAB 1: MARKET TERMINAL (USING companies.py MAP)
 # =======================================================
-import time
-import threading
+
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import plotly.graph_objects as go
+import numpy as np
+
+from companies import COMPANY_NAME_MAP  # 👈 YOUR FILE
 
 with tabs[0]:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stAppViewContainer"] {
-            background: radial-gradient(circle at 20% 20%, #0b0f1a, #000000 80%);
-            color: #f5f5f5;
-        }
-        .metric-card {
-            background: rgba(25, 25, 25, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-            border-radius: 16px;
-            padding: 20px;
-            backdrop-filter: blur(8px);
-            color: white;
-        }
-        .title-text {
-            text-align: center;
-            font-weight: 600;
-            font-size: 1.4rem;
-            color: #00bfff;
-        }
-        .live-badge {
-            background: #ff004f;
-            color: white;
-            border-radius: 12px;
-            padding: 3px 10px;
-            font-size: 0.8rem;
-            margin-left: 10px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
+
+    st.subheader("Live Market Terminal")
+
+    # ---------------------------------------------------
+    # COMPANY SELECTION (NAME → SYMBOL)
+    # ---------------------------------------------------
+    NAME_TO_SYMBOL = {v: k for k, v in COMPANY_NAME_MAP.items()}
+
+    company_name = st.selectbox(
+        "Select Company / Asset",
+        sorted(NAME_TO_SYMBOL.keys())
     )
 
-    st.markdown('<div class="title-text">Live Market Tracker <span class="live-badge">REAL-TIME</span></div>', unsafe_allow_html=True)
+    symbol = NAME_TO_SYMBOL[company_name]
 
-    ticker_choice = st.selectbox("Select Ticker", options=COMPANIES, index=0)
-    symbol = TICKER_MAP[ticker_choice]
-    refresh_rate = st.slider("⏱ Update Interval (seconds)", 1, 15, 3)
+    timeframe = st.selectbox(
+        "Timeframe",
+        ["1 Week", "1 Month", "3 Months", "6 Months", "1 Year"]
+    )
 
-    start_button = st.button("▶️ Start Live Tracking")
-    stop_button = st.button("⏹ Stop Tracking")
+    period_map = {
+        "1 Week": "7d",
+        "1 Month": "1mo",
+        "3 Months": "3mo",
+        "6 Months": "6mo",
+        "1 Year": "1y"
+    }
 
-    # placeholders
-    price_placeholder = st.empty()
-    chart_placeholder = st.empty()
+    interval_map = {
+        "1 Week": "1d",
+        "1 Month": "1d",
+        "3 Months": "1d",
+        "6 Months": "1d",
+        "1 Year": "1wk"
+    }
 
-    # Keep state
-    if "live_tracking" not in st.session_state:
-        st.session_state.live_tracking = False
+    # ---------------------------------------------------
+    # FETCH DATA (STOCKS + CRYPTO SAFE)
+    # ---------------------------------------------------
+    df = yf.download(
+        symbol,
+        period=period_map[timeframe],
+        interval=interval_map[timeframe],
+        progress=False
+    )
 
-    if start_button:
-        st.session_state.live_tracking = True
-    if stop_button:
-        st.session_state.live_tracking = False
+    if df.empty:
+        st.error("Market data not available")
+        st.stop()
 
-    # main live loop
-    if st.session_state.live_tracking:
-        st.success(f"Streaming live price updates for **{ticker_choice}** ...")
+    # yfinance safety
+    df.columns = df.columns.get_level_values(0)
 
-        prices, timestamps = [], []
+    # ---------------------------------------------------
+    # MARKET METRICS
+    # ---------------------------------------------------
+    latest = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) > 1 else latest
 
-        # start the live feed
-        for _ in range(1000):  # arbitrary upper limit to prevent infinite loop
-            if not st.session_state.live_tracking:
-                st.warning("⏹ Live tracking stopped.")
-                break
+    change = latest["Close"] - prev["Close"]
+    change_pct = (change / prev["Close"]) * 100 if prev["Close"] != 0 else 0
 
-            try:
-                # Get price
-                if ticker_choice in ["BTC", "ETH"]:
-                    price = get_crypto_price(symbol)
-                    currency = "USD"
-                else:
-                    price, currency = get_stock_price(symbol)
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Market Price", round(latest["Close"], 2), f"{change:.2f}")
+    col2.metric("Open", round(latest["Open"], 2))
+    col3.metric("High", round(latest["High"], 2))
+    col4.metric("Low", round(latest["Low"], 2))
+    col5.metric("Change %", f"{change_pct:.2f}%")
 
-                if not price:
-                    raise ValueError("Price not found")
+    # ---------------------------------------------------
+    # INDICATORS
+    # ---------------------------------------------------
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+    df["EMA200"] = df["Close"].ewm(span=200).mean()
 
-                current_time = datetime.now().strftime("%H:%M:%S")
-                prices.append(price)
-                timestamps.append(current_time)
+    df["Volume_SMA_9"] = df["Volume"].rolling(9).mean()
 
-                # Keep last 30 points
-                if len(prices) > 30:
-                    prices = prices[-30:]
-                    timestamps = timestamps[-30:]
+    delta = df["Close"].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    rs = gain.rolling(14).mean() / loss.rolling(14).mean()
+    df["RSI"] = 100 - (100 / (1 + rs))
 
-                # Compute movement
-                delta = round(prices[-1] - prices[-2], 2) if len(prices) > 1 else 0
-                arrow = "🟢↑" if delta > 0 else "🔴↓" if delta < 0 else "⚪→"
-                delta_text = f"+{delta}" if delta > 0 else str(delta)
+    ema12 = df["Close"].ewm(span=12).mean()
+    ema26 = df["Close"].ewm(span=26).mean()
+    df["MACD"] = ema12 - ema26
+    df["Signal"] = df["MACD"].ewm(span=9).mean()
+    df["Histogram"] = df["MACD"] - df["Signal"]
 
-                # update metric card
-                price_placeholder.markdown(
-                    f"""
-                    <div class="metric-card">
-                        <h2 style="margin:0;">{ticker_choice} ({currency})</h2>
-                        <h1 style="margin-top:10px; font-size:2.5rem; color:{'#39ff14' if delta>0 else '#ff4b4b' if delta<0 else '#f5f5f5'};">
-                            {price:.2f} {arrow}
-                        </h1>
-                        <p style="font-size:0.9rem; opacity:0.8;">Change: {delta_text}</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+    candle_colors = np.where(
+        df["Close"].values >= df["Open"].values,
+        "#26a69a",
+        "#ef5350"
+    )
 
-                # live chart
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=timestamps,
-                    y=prices,
-                    mode="lines+markers",
-                    line=dict(width=3, color="#00bfff"),
-                    marker=dict(size=6, color="#39ff14" if delta > 0 else "#ff4b4b"),
-                    name="Price"
-                ))
-                fig.update_layout(
-                    template="plotly_dark",
-                    title=dict(text=f"{ticker_choice} — Live Movement", x=0.5, font=dict(size=18, color="#00bfff")),
-                    xaxis_title="Time (hh:mm:ss)",
-                    yaxis_title="Price",
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)"),
-                    margin=dict(l=10, r=10, t=40, b=30),
-                    height=400,
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                )
-                chart_placeholder.plotly_chart(fig, use_container_width=True)
+    # ==================================================
+    # 📈 PRICE CHART
+    # ==================================================
+    st.subheader("📈 Price Trend")
 
-                time.sleep(refresh_rate)
+    fig_price = go.Figure()
 
-            except Exception as e:
-                st.error(f"⚠️ Error fetching data: {e}")
-                time.sleep(refresh_rate)
-                continue
+    fig_price.add_trace(go.Candlestick(
+        x=df.index,
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"],
+        increasing_line_color="#26a69a",
+        decreasing_line_color="#ef5350"
+    ))
+
+    fig_price.add_trace(go.Scatter(x=df.index, y=df["EMA20"], name="EMA 20"))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df["EMA50"], name="EMA 50"))
+    fig_price.add_trace(go.Scatter(x=df.index, y=df["EMA200"], name="EMA 200"))
+
+    fig_price.update_layout(
+        template="plotly_dark",
+        height=500,
+        xaxis_rangeslider_visible=False
+    )
+
+    st.plotly_chart(fig_price, use_container_width=True)
+
+    # ==================================================
+    # 📊 VOLUME CHART
+    # ==================================================
+    st.subheader("📊 Volume")
+
+    fig_vol = go.Figure()
+
+    fig_vol.add_trace(go.Bar(
+        x=df.index,
+        y=df["Volume"],
+        marker_color=candle_colors
+    ))
+
+    fig_vol.add_trace(go.Scatter(
+        x=df.index,
+        y=df["Volume_SMA_9"],
+        name="Volume SMA 9"
+    ))
+
+    fig_vol.update_layout(
+        template="plotly_dark",
+        height=300
+    )
+
+    st.plotly_chart(fig_vol, use_container_width=True)
+
+    # ==================================================
+    # 📉 RSI CHART
+    # ==================================================
+    st.subheader("📉 RSI (14)")
+
+    fig_rsi = go.Figure()
+
+    fig_rsi.add_trace(go.Scatter(x=df.index, y=df["RSI"]))
+    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
+
+    fig_rsi.update_layout(
+        template="plotly_dark",
+        height=250,
+        yaxis_range=[0, 100]
+    )
+
+    st.plotly_chart(fig_rsi, use_container_width=True)
+
+    # ==================================================
+    # 📉 MACD CHART
+    # ==================================================
+    st.subheader("📉 MACD")
+
+    fig_macd = go.Figure()
+
+    fig_macd.add_trace(go.Scatter(x=df.index, y=df["MACD"], name="MACD"))
+    fig_macd.add_trace(go.Scatter(x=df.index, y=df["Signal"], name="Signal"))
+
+    fig_macd.add_trace(go.Bar(
+        x=df.index,
+        y=df["Histogram"],
+        marker_color=np.where(df["Histogram"] >= 0, "#26a69a", "#ef5350")
+    ))
+
+    fig_macd.update_layout(
+        template="plotly_dark",
+        height=300
+    )
+
+    st.plotly_chart(fig_macd, use_container_width=True)
+
+
 # =======================================================
 # TAB 2: SENTIMENT-COLORED NEWS CARDS (3x3) + LLM SUMMARY
 # =======================================================
+
 import uuid
 
 with tabs[1]:
@@ -257,52 +320,56 @@ with tabs[1]:
     # --------------------------------------------------
     # CSS (Compact & Clean)
     # --------------------------------------------------
-    st.markdown("""
-    <style>
-    .news-card {
-        border-radius: 14px;
-        padding: 14px;
-        color: white;
-        height: 190px;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-        transition: transform 0.2s ease, box-shadow 0.3s ease;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    .news-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 22px rgba(0,191,255,0.45);
-    }
+    st.markdown(
+        """
+        <style>
+        .news-card {
+            border-radius: 14px;
+            padding: 14px;
+            color: white;
+            height: 190px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+            transition: transform 0.2s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
 
-    .positive { background: linear-gradient(135deg, #0f9b0f, #38ef7d); }
-    .neutral  { background: linear-gradient(135deg, #6d6027, #d3cbb8); }
-    .negative { background: linear-gradient(135deg, #93291e, #ed213a); }
+        .news-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 22px rgba(0,191,255,0.45);
+        }
 
-    .headline {
-        font-size: 14px;
-        font-weight: 600;
-        line-height: 1.3;
-        margin-bottom: 6px;
-    }
+        .positive { background: linear-gradient(135deg, #0f9b0f, #38ef7d); }
+        .neutral  { background: linear-gradient(135deg, #6d6027, #d3cbb8); }
+        .negative { background: linear-gradient(135deg, #93291e, #ed213a); }
 
-    .meta {
-        font-size: 12px;
-        opacity: 0.9;
-    }
+        .headline {
+            font-size: 14px;
+            font-weight: 600;
+            line-height: 1.3;
+            margin-bottom: 6px;
+        }
 
-    .source {
-        font-size: 11px;
-        margin-top: 6px;
-    }
+        .meta {
+            font-size: 12px;
+            opacity: 0.9;
+        }
 
-    .source a {
-        color: #ffffff;
-        text-decoration: underline;
-        opacity: 0.85;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+        .source {
+            font-size: 11px;
+            margin-top: 6px;
+        }
+
+        .source a {
+            color: #ffffff;
+            text-decoration: underline;
+            opacity: 0.85;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # --------------------------------------------------
     # Fetch + Deduplicate + Limit (3x3)
@@ -320,7 +387,7 @@ with tabs[1]:
         st.stop()
 
     # --------------------------------------------------
-    # Sentiment (FAST)
+    # Sentiment Analysis (Fast Cache)
     # --------------------------------------------------
     @st.cache_data
     def cached_sentiment(text):
@@ -351,6 +418,7 @@ with tabs[1]:
         else:
             source = "Source"
 
+        # Sentiment input
         sentiment_input = f"{headline}. {description}"
         sentiment_data = cached_sentiment(sentiment_input)
 
@@ -358,11 +426,11 @@ with tabs[1]:
         confidence = int(sentiment_data["confidence"] * 100)
 
         if sentiment == "Positive":
-            css, label = "positive", "🟢 Positive"
+            css_class, label = "positive", "🟢 Positive"
         elif sentiment == "Negative":
-            css, label = "negative", "🔴 Negative"
+            css_class, label = "negative", "🔴 Negative"
         else:
-            css, label = "neutral", "⚪ Neutral"
+            css_class, label = "neutral", "⚪ Neutral"
 
         with cols[idx % 3]:
             if st.button("Summarize", key=f"summarize_{idx}"):
@@ -371,7 +439,7 @@ with tabs[1]:
 
             st.markdown(
                 f"""
-                <div class="news-card {css}">
+                <div class="news-card {css_class}">
                     <div>
                         <div class="headline">{headline[:80]}...</div>
                         <div class="meta">{label} · {confidence}%</div>
@@ -381,23 +449,24 @@ with tabs[1]:
                     </div>
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
-# --------------------------------------------------
+
+# =====================================================
 # LLM SUMMARY (WHITE PANEL WITH GAP)
-# --------------------------------------------------
+# =====================================================
 if st.session_state.selected_article:
     article = st.session_state.selected_article
 
-    # ✅ Gap from cards
+    # Gap from cards
     st.markdown("<div style='margin-top:40px;'></div>", unsafe_allow_html=True)
 
     with st.expander("LLM-Generated News Summary", expanded=True):
         with st.spinner("Summarizing full news using LLM..."):
             summary = summarize_single_article(article)
 
-        # ✅ White summary container
+        # White summary container
         st.markdown(
             f"""
             <div style="
@@ -408,13 +477,15 @@ if st.session_state.selected_article:
                 box-shadow: 0 8px 20px rgba(0,0,0,0.15);
                 line-height: 1.6;
             ">
-                <h3 style="margin-top:0;">📰 {article.get('headline') or article.get('title')}</h3>
+                <h3 style="margin-top:0;">
+                    📰 {article.get('headline') or article.get('title')}
+                </h3>
                 <p style="font-size:15px; white-space:pre-line;">
                     {summary}
                 </p>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
         sentiment = analyze_sentiment(summary)
@@ -422,17 +493,23 @@ if st.session_state.selected_article:
         st.markdown(
             f"""
             <div style="margin-top:15px; font-size:14px;">
-                <b>Sentiment:</b> {sentiment['sentiment']} <br>
+                <b>Sentiment:</b> {sentiment['sentiment']}<br>
                 <b>Confidence Score:</b> {int(sentiment['confidence'] * 100)}%
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
         if article.get("url"):
             st.markdown(
-                f"<div style='margin-top:10px;'><a href='{article['url']}' target='_blank'>🔗 Read full article</a></div>",
-                unsafe_allow_html=True
+                f"""
+                <div style="margin-top:10px;">
+                    <a href="{article['url']}" target="_blank">
+                        🔗 Read full article
+                    </a>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
         if st.button("❌ Close Summary"):
@@ -452,7 +529,7 @@ def detect_market_intent(query: str) -> bool:
     keywords = [
         "price", "current", "today", "now",
         "market", "trading", "stock", "crypto",
-        "bitcoin", "ethereum", "share"
+        "bitcoin", "ethereum", "share",
     ]
     return any(word in query.lower() for word in keywords)
 
@@ -487,15 +564,20 @@ def get_live_market_chat_response(query: str) -> str:
                         )
 
             except Exception:
-                responses.append(f"⚠️ Unable to fetch live price for {company_name}")
+                responses.append(
+                    f"⚠️ Unable to fetch live price for {company_name}"
+                )
 
     return "\n\n".join(responses)
-
-
 # =======================================================
 # TAB 3: COPILOT CHAT — LIVE MARKET + RAG
 # =======================================================
+
 with tabs[2]:
+
+    # --------------------------------------------------
+    # CSS Styling
+    # --------------------------------------------------
     st.markdown(
         """
         <style>
@@ -505,11 +587,13 @@ with tabs[2]:
             padding: 25px;
             box-shadow: 0 0 25px rgba(0,191,255,0.2);
         }
+
         .chat-container {
             max-height: 550px;
             overflow-y: auto;
             padding-right: 10px;
         }
+
         .user-msg {
             background: linear-gradient(135deg, #002b36, #004b66);
             color: #f5f5f5;
@@ -519,6 +603,7 @@ with tabs[2]:
             max-width: 80%;
             align-self: flex-end;
         }
+
         .bot-msg {
             background: linear-gradient(135deg, #111111, #1a1a1a);
             border: 1px solid rgba(0,191,255,0.3);
@@ -530,35 +615,58 @@ with tabs[2]:
         }
         </style>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="main-container">', unsafe_allow_html=True)
-    st.markdown("<h2 style='color:#00bfff;text-align:center;'>💬 Financial Copilot Chat</h2>", unsafe_allow_html=True)
+    # --------------------------------------------------
+    # Main Chat Container
+    # --------------------------------------------------
+    st.markdown("<div class='main-container'>", unsafe_allow_html=True)
+
+    st.markdown(
+        "<h2 style='color:#00bfff;text-align:center;'>💬 Financial Copilot Chat</h2>",
+        unsafe_allow_html=True,
+    )
+
     st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
 
-    # ---------------------------
+    # --------------------------------------------------
     # Display Chat History
-    # ---------------------------
+    # --------------------------------------------------
     for chat in st.session_state.chat_history:
-        st.markdown(f"""
-        <div style="display:flex; flex-direction:column;">
-            <div class="user-msg"><b>You</b><br>{chat['user']}</div>
-            <div class="bot-msg"><b>Copilot</b><br>{chat['bot']}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style="display:flex; flex-direction:column;">
+                <div class="user-msg">
+                    <b>You</b><br>
+                    {chat['user']}
+                </div>
+
+                <div class="bot-msg">
+                    <b>Copilot</b><br>
+                    {chat['bot']}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---------------------------
-    # Chat Input
-    # ---------------------------
-    st.markdown("<hr style='border-color:rgba(0,191,255,0.3);margin-top:25px;'>", unsafe_allow_html=True)
+    # --------------------------------------------------
+    # Chat Input Section
+    # --------------------------------------------------
+    st.markdown(
+        "<hr style='border-color:rgba(0,191,255,0.3); margin-top:25px;'>",
+        unsafe_allow_html=True,
+    )
+
     with st.form(key="chat_form", clear_on_submit=True):
         user_input = st.text_input(
             "Ask about stocks, crypto, or markets:",
             placeholder="e.g., What is the current price of Infosys?",
         )
+
         submit_button = st.form_submit_button("🚀 Send")
 
         if submit_button and user_input.strip():
@@ -566,19 +674,24 @@ with tabs[2]:
                 try:
                     bot_sections = []
 
-                    # 1️⃣ Live market data
+                    # 1️⃣ Live Market Data
                     if detect_market_intent(user_input):
                         live_data = get_live_market_chat_response(user_input)
                         if live_data:
-                            bot_sections.append("### 📊 Live Market Update\n" + live_data)
+                            bot_sections.append(
+                                "### 📊 Live Market Update\n" + live_data
+                            )
 
-                    # 2️⃣ LLM / RAG response
+                    # 2️⃣ LLM / RAG Insight
                     response = answer_query_real_time(user_input)
                     llm_answer = response.get("answer", "")
-                    if llm_answer:
-                        bot_sections.append("### 🧠 Market Insight\n" + llm_answer)
 
-                    # 3️⃣ Related news
+                    if llm_answer:
+                        bot_sections.append(
+                            "### 🧠 Market Insight\n" + llm_answer
+                        )
+
+                    # 3️⃣ Related News
                     live_facts = response.get("live_facts", {})
                     news_links = []
 
@@ -589,17 +702,22 @@ with tabs[2]:
                             news_links.append(f"- [{title}]({url})")
 
                     if news_links:
-                        bot_sections.append("### 📰 Related News\n" + "\n".join(news_links))
+                        bot_sections.append(
+                            "### 📰 Related News\n" + "\n".join(news_links)
+                        )
 
                     bot_answer = "\n\n".join(bot_sections)
 
                 except Exception as e:
                     bot_answer = f"⚠️ Error fetching data: {e}"
 
-            st.session_state.chat_history.append({
-                "user": user_input,
-                "bot": bot_answer
-            })
+            st.session_state.chat_history.append(
+                {
+                    "user": user_input,
+                    "bot": bot_answer,
+                }
+            )
+
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
